@@ -1,0 +1,14 @@
+ServerAlert service commands:
+
+systemctl start serveralert      # start monitor
+systemctl stop serveralert       # stop monitor
+systemctl restart serveralert    # restart monitor/reload .env
+systemctl status serveralert     # check status/logs
+journalctl -u serveralert -f     # follow live logs
+
+Install / uninstall via helper script:
+
+/var/www/serveralert/start.sh install   # install + enable service
+/var/www/serveralert/start.sh uninstall # stop + disable + remove service
+
+Service unit: /etc/systemd/system/serveralert.service (enabled, survives reboots)

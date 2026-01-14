@@ -1,0 +1,15 @@
+[Unit]
+Description=ServerAlert Monitoring Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/serveralert
+ExecStart=/bin/bash /var/www/serveralert/start.sh run
+Restart=on-failure
+RestartSec=5
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target
