@@ -53,17 +53,4 @@ def build_embed(
             "inline": False
         })
 
-    thumbnail_url = embed_config.get("thumbnail_url")
-    if thumbnail_url:
-        embed["thumbnail"] = {"url": thumbnail_url}
-
-    image_url = ""
-    if status == "CRITICAL":
-        image_url = embed_config.get("image_url", "")
-    elif status == "WARNING":
-        image_url = embed_config.get("image_warning_url", "")
-
-    if image_url:
-        embed["image"] = {"url": image_url}
-
     return embed
