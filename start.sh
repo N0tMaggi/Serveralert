@@ -48,7 +48,7 @@ run_service() {
         source venv/bin/activate
         pip install --upgrade pip
         echo "Installing dependencies..."
-        pip install psutil requests
+        pip install -r requirements.txt
     else
         source venv/bin/activate
     fi

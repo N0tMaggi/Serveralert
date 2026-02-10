@@ -1,21 +1,16 @@
 import subprocess
 import time
 
-from modules import alerts, config, state
+from modules import alerts, logger, runtime as runtime_mod, state
 
 running_services_snapshot = set()
-
-
-def _get_config():
-    if config.CONFIG is None:
-        config.set_config(config.load_config())
-    return config.CONFIG
 
 
 def check_critical_services():
     while True:
         state.update_thread_status("Critical Services")
-        config_data = _get_config()
+        runtime = runtime_mod.get_runtime()
+        config_data = runtime.config
         detections = config_data["detections"]
         if not detections.get("service_status", True):
             time.sleep(config_data["check_interval_seconds"])
@@ -41,7 +36,8 @@ def check_critical_services():
                         "active",
                         "CRITICAL",
                         f"Service {service} is down. Attempting restart...",
-                        f"Recent Logs:\n{logs}"
+                        f"Recent Logs:\n{logs}",
+                        runtime=runtime
                     )
                     subprocess.run(["systemctl", "restart", service])
                     time.sleep(5)
@@ -52,7 +48,8 @@ def check_critical_services():
                             "active",
                             "active",
                             "NORMAL",
-                            f"Service {service} recovered successfully"
+                            f"Service {service} recovered successfully",
+                            runtime=runtime
                         )
                     else:
                         alerts.send_discord_alert(
@@ -60,7 +57,8 @@ def check_critical_services():
                             "failed",
                             "active",
                             "CRITICAL",
-                            f"Service {service} failed to restart"
+                            f"Service {service} failed to restart",
+                            runtime=runtime
                         )
                 else:
                     alerts.send_discord_alert(
@@ -68,10 +66,11 @@ def check_critical_services():
                         "active",
                         "active",
                         "NORMAL",
-                        f"Service {service} is running"
+                        f"Service {service} is running",
+                        runtime=runtime
                     )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.log(f"Critical services monitor error: {exc}")
         time.sleep(config_data["check_interval_seconds"])
 
 
@@ -91,7 +90,8 @@ def monitor_service_changes():
 
     while True:
         state.update_thread_status("Service Changes")
-        config_data = _get_config()
+        runtime = runtime_mod.get_runtime()
+        config_data = runtime.config
         detections = config_data["detections"]
         if not detections.get("service_changes", True):
             time.sleep(60)
@@ -116,7 +116,8 @@ def monitor_service_changes():
                         service,
                         "",
                         "WARNING",
-                        f"A new service has started: {service}"
+                        f"A new service has started: {service}",
+                        runtime=runtime
                     )
 
             if stopped_services:
@@ -127,10 +128,11 @@ def monitor_service_changes():
                             service,
                             "",
                             "WARNING",
-                            f"A service has stopped: {service}"
+                            f"A service has stopped: {service}",
+                            runtime=runtime
                         )
 
             running_services_snapshot = current_services
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.log(f"Service change monitor error: {exc}")
         time.sleep(60)

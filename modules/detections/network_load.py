@@ -3,19 +3,14 @@ import time
 
 import psutil
 
-from modules import alerts, config, state
-
-
-def _get_config():
-    if config.CONFIG is None:
-        config.set_config(config.load_config())
-    return config.CONFIG
+from modules import alerts, logger, runtime as runtime_mod, state
 
 
 def check_network_and_load():
     while True:
         state.update_thread_status("Network/Load")
-        config_data = _get_config()
+        runtime = runtime_mod.get_runtime()
+        config_data = runtime.config
         thresholds = config_data["thresholds"]
         detections = config_data["detections"]
         try:
@@ -28,7 +23,8 @@ def check_network_and_load():
                         connection_count,
                         thresholds["connections"],
                         "CRITICAL",
-                        "High number of connections detected"
+                        "High number of connections detected",
+                        runtime=runtime
                     )
                 else:
                     alerts.send_discord_alert(
@@ -36,7 +32,8 @@ def check_network_and_load():
                         connection_count,
                         thresholds["connections"],
                         "NORMAL",
-                        "Connection count is normal"
+                        "Connection count is normal",
+                        runtime=runtime
                     )
 
             if detections.get("load_average", True):
@@ -47,7 +44,8 @@ def check_network_and_load():
                         load_avg,
                         thresholds["load_average"],
                         "CRITICAL",
-                        "High system load detected"
+                        "High system load detected",
+                        runtime=runtime
                     )
                 else:
                     alerts.send_discord_alert(
@@ -55,8 +53,9 @@ def check_network_and_load():
                         load_avg,
                         thresholds["load_average"],
                         "NORMAL",
-                        "Load average is normal"
+                        "Load average is normal",
+                        runtime=runtime
                     )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.log(f"Network/load monitor error: {exc}")
         time.sleep(config_data["check_interval_seconds"])

@@ -4,16 +4,10 @@ import time
 
 import requests
 
-from modules import config
+from modules import runtime as runtime_mod
 
 geoip_cache = {}
 geoip_cache_lock = threading.Lock()
-
-
-def _get_config():
-    if config.CONFIG is None:
-        config.set_config(config.load_config())
-    return config.CONFIG
 
 
 def is_private_ip(ip_str):
@@ -24,8 +18,9 @@ def is_private_ip(ip_str):
         return True
 
 
-def lookup_geoip(ip_str):
-    config_data = _get_config()
+def lookup_geoip(ip_str, runtime=None):
+    runtime = runtime if runtime is not None else runtime_mod.get_runtime()
+    config_data = runtime.config
     log_config = config_data.get("log_monitor", {})
     if not log_config.get("geoip_lookup", False) or not ip_str or is_private_ip(ip_str):
         return ip_str
@@ -40,7 +35,7 @@ def lookup_geoip(ip_str):
     location = "Unknown"
     request_timeout = config_data.get("request_timeout_seconds", 5)
     try:
-        response = requests.get(
+        response = runtime.session.get(
             f"http://ip-api.com/json/{ip_str}?fields=status,country,regionName,city,query",
             timeout=request_timeout
         )

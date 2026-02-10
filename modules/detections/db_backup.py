@@ -6,20 +6,15 @@ import time
 
 import requests
 
-from modules import alerts, config, state, system_info
+from modules import alerts, logger, runtime as runtime_mod, state, system_info
 
 
-def _get_config():
-    if config.CONFIG is None:
-        config.set_config(config.load_config())
-    return config.CONFIG
-
-
-def perform_db_backup():
-    config_data = _get_config()
+def perform_db_backup(runtime=None):
+    runtime = runtime if runtime is not None else runtime_mod.get_runtime()
+    config_data = runtime.config
     webhook_url = config_data["webhooks"].get("db") or config_data["discord_webhook_url"]
     if not webhook_url:
-        print("No DB webhook configured.")
+        logger.log("No DB webhook configured.")
         return
 
     db_config = config_data["database"]
@@ -45,6 +40,7 @@ def perform_db_backup():
         next_run = datetime.datetime.now() + datetime.timedelta(minutes=interval_minutes)
         next_run_ts = int(next_run.timestamp())
 
+        system_data = system_info.collect_system_info(runtime)
         embed_payload = {
             "title": "Database Backup",
             "description": "Backup completed successfully.",
@@ -62,7 +58,7 @@ def perform_db_backup():
                 },
                 {
                     "name": "System",
-                    "value": system_info.get_system_info(),
+                    "value": system_info.format_system_info(system_data),
                     "inline": False
                 }
             ],
@@ -73,13 +69,17 @@ def perform_db_backup():
         with open(filepath, "rb") as file_handle:
             files = {"file": (filename, file_handle, "application/sql")}
             payload = {"payload_json": json.dumps({"embeds": [embed_payload]})}
-            requests.post(webhook_url, data=payload, files=files, timeout=30)
+            response = runtime.session.post(webhook_url, data=payload, files=files, timeout=30)
+            if response.status_code >= 400:
+                raise requests.RequestException(
+                    f"Webhook returned {response.status_code}: {response.text[:200]}"
+                )
 
     except subprocess.CalledProcessError as exc:
-        print(f"Database backup failed: {exc}")
+        logger.log(f"Database backup failed: {exc}")
         alerts.send_discord_alert("Database Backup", "Failed", "", "CRITICAL", "Database backup process failed", str(exc))
     except Exception as exc:
-        print(f"Error sending backup: {exc}")
+        logger.log(f"Error sending backup: {exc}")
         alerts.send_discord_alert("Database Backup", "Error", "", "CRITICAL", "Error sending database backup", str(exc))
     finally:
         if os.path.exists(filepath):
@@ -89,6 +89,7 @@ def perform_db_backup():
 def db_backup_loop():
     while True:
         state.update_thread_status("DB Backup")
-        perform_db_backup()
-        config_data = _get_config()
+        runtime = runtime_mod.get_runtime()
+        perform_db_backup(runtime)
+        config_data = runtime.config
         time.sleep(config_data["database"]["backup_interval_minutes"] * 60)

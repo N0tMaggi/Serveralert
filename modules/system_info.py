@@ -1,20 +1,50 @@
 import platform
-import socket
 import time
 
 import psutil
 
 
-def get_system_info():
+def collect_system_info(runtime=None):
     try:
-        hostname = socket.gethostname()
-        ip_address = socket.gethostbyname(hostname)
+        if runtime is not None:
+            hostname = runtime.hostname
+            ip_address = runtime.ip_address
+        else:
+            import socket
+
+            hostname = socket.gethostname()
+            ip_address = socket.gethostbyname(hostname)
         os_info = f"{platform.system()} {platform.release()}"
         uptime_seconds = time.time() - psutil.boot_time()
         uptime_string = time.strftime("%H:%M:%S", time.gmtime(uptime_seconds))
-        return f"Host: {hostname} ({ip_address}) | OS: {os_info} | Uptime: {uptime_string}"
+        return {
+            "host": hostname,
+            "ip": ip_address,
+            "os": os_info,
+            "uptime": uptime_string,
+            "uptime_seconds": int(uptime_seconds)
+        }
     except Exception:
+        return {
+            "host": "unknown",
+            "ip": "unknown",
+            "os": "unknown",
+            "uptime": "unknown",
+            "uptime_seconds": 0
+        }
+
+
+def format_system_info(info):
+    if not isinstance(info, dict):
         return "System info unavailable"
+    return (
+        f"Host: {info.get('host', 'unknown')} ({info.get('ip', 'unknown')}) | "
+        f"OS: {info.get('os', 'unknown')} | Uptime: {info.get('uptime', 'unknown')}"
+    )
+
+
+def get_system_info(runtime=None):
+    return format_system_info(collect_system_info(runtime))
 
 
 def get_top_processes(sort_by="cpu", limit=5):

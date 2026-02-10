@@ -2,16 +2,10 @@ import hashlib
 import os
 import time
 
-from modules import alerts, config, state
+from modules import alerts, logger, runtime as runtime_mod, state
 
 HASH_SKIPPED = "HASH_SKIPPED"
 file_snapshots = {}
-
-
-def _get_config():
-    if config.CONFIG is None:
-        config.set_config(config.load_config())
-    return config.CONFIG
 
 
 def compute_file_hash(path, max_bytes, chunk_size):
@@ -80,7 +74,8 @@ def metadata_changed(previous, current):
 
 def check_files():
     global file_snapshots
-    config_data = _get_config()
+    runtime = runtime_mod.get_runtime()
+    config_data = runtime.config
     file_config = config_data["file_monitor"]
     max_bytes = file_config["hash_max_file_size_mb"] * 1024 * 1024
     chunk_size = file_config["hash_chunk_size"]
@@ -101,7 +96,8 @@ def check_files():
 
     while True:
         state.update_thread_status("File Monitor")
-        config_data = _get_config()
+        runtime = runtime_mod.get_runtime()
+        config_data = runtime.config
         detections = config_data["detections"]
         if not detections.get("file_changes", True):
             time.sleep(config_data["check_interval_seconds"])
@@ -156,12 +152,13 @@ def check_files():
                             0,
                             "CRITICAL",
                             f"File changes detected in {directory}",
-                            "\n".join(change_messages)
+                            "\n".join(change_messages),
+                            runtime=runtime
                         )
 
                     file_snapshots[directory] = current_snapshot
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as exc:
+                    logger.log(f"File monitor error for {directory}: {exc}")
+        except Exception as exc:
+            logger.log(f"File monitor error: {exc}")
         time.sleep(config_data["check_interval_seconds"])

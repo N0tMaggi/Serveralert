@@ -1,13 +1,7 @@
 import re
 import subprocess
 
-from modules import alerts, config, geoip, state
-
-
-def _get_config():
-    if config.CONFIG is None:
-        config.set_config(config.load_config())
-    return config.CONFIG
+from modules import alerts, geoip, logger, runtime as runtime_mod, state
 
 
 def monitor_logs():
@@ -26,7 +20,8 @@ def monitor_logs():
             if not line:
                 continue
 
-            config_data = _get_config()
+            runtime = runtime_mod.get_runtime()
+            config_data = runtime.config
             detections = config_data["detections"]
 
             if detections.get("ssh_login", True) and "sshd" in line and (
@@ -36,31 +31,31 @@ def monitor_logs():
                 ip = re.search(r"from (.*?) port", line)
                 user_str = user.group(1) if user else "unknown"
                 ip_str = ip.group(1) if ip else "unknown"
-                geo_info = geoip.lookup_geoip(ip_str)
+                geo_info = geoip.lookup_geoip(ip_str, runtime=runtime)
                 alerts.send_discord_alert(
                     "SSH Login",
                     user_str,
                     "",
                     "WARNING",
                     f"Successful SSH login for user {user_str}",
-                    f"IP: {geo_info}\nLog: {line.strip()}"
+                    f"IP: {geo_info}\nLog: {line.strip()}",
+                    runtime=runtime
                 )
 
             if detections.get("ssh_failed", True) and "sshd" in line and "Failed password" in line:
                 user = re.search(r"Failed password for (?:invalid user )?(\S+)", line)
                 ip = re.search(r"from (.*?) port", line)
-                password = re.search(r"password(?:=|:)\s*(\S+)", line)
                 user_str = user.group(1) if user else "unknown"
                 ip_str = ip.group(1) if ip else "unknown"
-                password_str = password.group(1) if password else "unavailable"
-                geo_info = geoip.lookup_geoip(ip_str)
+                geo_info = geoip.lookup_geoip(ip_str, runtime=runtime)
                 alerts.send_discord_alert(
                     "SSH Failed Login",
                     user_str,
                     "",
                     "WARNING",
                     f"Failed SSH login for user {user_str}",
-                    f"IP: {geo_info}\nPassword: {password_str}\nLog: {line.strip()}"
+                    f"IP: {geo_info}\nLog: {line.strip()}",
+                    runtime=runtime
                 )
 
             if detections.get("sudo", True) and "sudo" in line and "COMMAND=" in line:
@@ -74,7 +69,8 @@ def monitor_logs():
                     "",
                     "WARNING",
                     f"Sudo command executed by {user_str}",
-                    f"Command: {cmd_str}"
+                    f"Command: {cmd_str}",
+                    runtime=runtime
                 )
 
             if detections.get("privilege", True) and "su[" in line and (
@@ -86,7 +82,8 @@ def monitor_logs():
                     "",
                     "WARNING",
                     "su command activity detected",
-                    line.strip()
+                    line.strip(),
+                    runtime=runtime
                 )
 
             if detections.get("password_change", True) and "passwd[" in line and (
@@ -98,7 +95,8 @@ def monitor_logs():
                     "",
                     "WARNING",
                     "passwd command activity detected",
-                    line.strip()
+                    line.strip(),
+                    runtime=runtime
                 )
 
             if detections.get("kernel", True) and "kernel:" in line and (
@@ -110,7 +108,8 @@ def monitor_logs():
                     "",
                     "WARNING",
                     "Kernel reported a security-related message",
-                    line.strip()
+                    line.strip(),
+                    runtime=runtime
                 )
 
             if detections.get("firewall", True) and any(keyword in line for keyword in firewall_keywords):
@@ -120,8 +119,9 @@ def monitor_logs():
                     "",
                     "WARNING",
                     "Firewall log event detected",
-                    line.strip()
+                    line.strip(),
+                    runtime=runtime
                 )
 
     except Exception as exc:
-        print(f"Log monitor failed: {exc}")
+        logger.log(f"Log monitor failed: {exc}")

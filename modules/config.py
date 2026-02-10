@@ -65,10 +65,7 @@ def env_int(key, default):
 
 
 def build_default_config():
-    default_webhook_fallback = env_value(
-        "WEBHOOK_DEFAULT",
-        "https://discord.com/api/webhooks/1431187987282133113/3MLfgswtruHYCTgDO3Q2E3t84wKJtOVz6WW2dG2SmhuiNre3dRjKbiNy_VwSAXpWFS6t"
-    )
+    default_webhook_fallback = env_value("WEBHOOK_DEFAULT", "")
 
     return {
         "discord_webhook_url": default_webhook_fallback,
@@ -149,6 +146,7 @@ def build_default_config():
             "thumbnail_url": env_value("EMBED_THUMB_URL", ""),
             "image_url": env_value("EMBED_IMAGE_URL", ""),
             "image_warning_url": env_value("EMBED_IMAGE_WARNING_URL", ""),
+            "image_critical_url": env_value("EMBED_IMAGE_CRITICAL_URL", ""),
             "show_top_processes": env_bool("EMBED_SHOW_TOP_PROCESSES", True)
         },
         "detections": {
@@ -210,3 +208,9 @@ def load_config():
 def set_config(config):
     global CONFIG
     CONFIG = config
+
+
+def get_config():
+    if CONFIG is None:
+        set_config(load_config())
+    return CONFIG

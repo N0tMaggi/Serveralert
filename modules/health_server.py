@@ -2,15 +2,9 @@ import json
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from modules import config, state
+from modules import runtime as runtime_mod, state
 
 SCRIPT_START_TIME = time.time()
-
-
-def _get_config():
-    if config.CONFIG is None:
-        config.set_config(config.load_config())
-    return config.CONFIG
 
 
 class HealthRequestHandler(BaseHTTPRequestHandler):
@@ -46,7 +40,8 @@ class HealthRequestHandler(BaseHTTPRequestHandler):
 
 
 def start_health_server():
-    config_data = _get_config()
+    runtime = runtime_mod.get_runtime()
+    config_data = runtime.config
     health_config = config_data.get("health_server", {})
     if not health_config.get("enabled", False):
         return
@@ -61,4 +56,6 @@ def start_health_server():
             state.update_thread_status("Health Server")
             server.handle_request()
     except Exception as exc:
-        print(f"Health server stopped: {exc}")
+        from modules import logger
+
+        logger.log(f"Health server stopped: {exc}")

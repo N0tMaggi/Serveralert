@@ -1,14 +1,15 @@
 import threading
 import time
 
-from modules import config, logger
+from modules import config, logger, runtime as runtime_mod
 from modules.detections import db_backup, file_monitor, log_monitor, network_load, resources, services
 from modules import health_server
 
 
 def start_monitoring():
     logger.log("Starting ServerAlert System...")
-    config_data = config.CONFIG
+    runtime = runtime_mod.get_runtime()
+    config_data = runtime.config
     detections = config_data["detections"]
     threads = []
 
@@ -42,5 +43,7 @@ def start_monitoring():
 
 if __name__ == "__main__":
     config.load_env_file(config.ENV_PATH)
-    config.set_config(config.load_config())
+    config_data = config.load_config()
+    config.set_config(config_data)
+    runtime_mod.set_runtime(runtime_mod.build_runtime(config_data))
     start_monitoring()

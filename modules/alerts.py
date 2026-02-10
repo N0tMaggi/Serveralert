@@ -2,7 +2,7 @@ import time
 
 import requests
 
-from modules import config, embed, system_info
+from modules import embed, logger, runtime as runtime_mod, system_info
 
 alert_state = {}
 alert_state_lock = None
@@ -33,10 +33,8 @@ RESOURCE_ALERT_TYPES = {
 SERVICE_CHANGE_ALERT_TYPES = {"New Service Started", "Service Stopped"}
 
 
-def _get_config():
-    if config.CONFIG is None:
-        config.set_config(config.load_config())
-    return config.CONFIG
+def _get_runtime(runtime=None):
+    return runtime if runtime is not None else runtime_mod.get_runtime()
 
 
 def _get_alert_lock():
@@ -74,15 +72,25 @@ def get_detection_category(detection_type):
     return "default"
 
 
-def get_webhook_url(detection_type):
-    config_data = _get_config()
+def get_webhook_url(detection_type, runtime=None):
+    config_data = _get_runtime(runtime).config
     webhooks = config_data["webhooks"]
     category = get_detection_category(detection_type)
     return webhooks.get(category) or webhooks.get("default") or config_data["discord_webhook_url"]
 
 
-def send_discord_alert(detection_type, value, threshold, status, message, extra_info="", top_processes=None):
-    config_data = _get_config()
+def send_discord_alert(
+    detection_type,
+    value,
+    threshold,
+    status,
+    message,
+    extra_info="",
+    top_processes=None,
+    runtime=None
+):
+    runtime = _get_runtime(runtime)
+    config_data = runtime.config
     should_send = False
 
     if detection_type in ALWAYS_SEND_TYPES:
@@ -111,7 +119,7 @@ def send_discord_alert(detection_type, value, threshold, status, message, extra_
             return
         last_alert_times[detection_type] = time.time()
 
-    system_info_text = system_info.get_system_info()
+    system_info_text = system_info.collect_system_info(runtime)
     embed_config = config_data.get("embed", {})
     if not embed_config.get("show_top_processes", True):
         top_processes = None
@@ -132,9 +140,9 @@ def send_discord_alert(detection_type, value, threshold, status, message, extra_
     else:
         data = {"embeds": [embed_payload]}
 
-    webhook_url = get_webhook_url(detection_type)
+    webhook_url = get_webhook_url(detection_type, runtime=runtime)
     if not webhook_url:
-        print(f"No webhook configured for detection type {detection_type}")
+        logger.log(f"No webhook configured for detection type {detection_type}")
         return
 
     request_timeout = config_data["request_timeout_seconds"]
@@ -142,10 +150,14 @@ def send_discord_alert(detection_type, value, threshold, status, message, extra_
 
     for attempt in range(request_max_retries):
         try:
-            requests.post(webhook_url, json=data, timeout=request_timeout)
+            response = runtime.session.post(webhook_url, json=data, timeout=request_timeout)
+            if response.status_code >= 400:
+                raise requests.RequestException(
+                    f"Webhook returned {response.status_code}: {response.text[:200]}"
+                )
             break
         except Exception as exc:
             if attempt == request_max_retries - 1:
-                print(f"Error sending alert: {exc}")
+                logger.log(f"Error sending alert: {exc}")
             else:
                 time.sleep(1)
