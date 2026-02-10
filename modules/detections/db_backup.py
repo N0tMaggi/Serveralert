@@ -1,4 +1,5 @@
 import datetime
+import gzip
 import json
 import os
 import subprocess
@@ -21,6 +22,8 @@ def perform_db_backup(runtime=None):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"db_backup_{timestamp}.sql"
     filepath = os.path.join("/tmp", filename)
+    zip_filename = f"{filename}.gz"
+    zip_filepath = f"{filepath}.gz"
 
     try:
         cmd = [
@@ -35,7 +38,10 @@ def perform_db_backup(runtime=None):
 
         subprocess.run(cmd, check=True, capture_output=True)
 
-        file_size_mb = os.path.getsize(filepath) / (1024 * 1024)
+        with open(filepath, "rb") as source_file, gzip.open(zip_filepath, "wb") as zipped_file:
+            zipped_file.writelines(source_file)
+
+        file_size_mb = os.path.getsize(zip_filepath) / (1024 * 1024)
         interval_minutes = db_config["backup_interval_minutes"]
         next_run = datetime.datetime.now() + datetime.timedelta(minutes=interval_minutes)
         next_run_ts = int(next_run.timestamp())
@@ -48,7 +54,7 @@ def perform_db_backup(runtime=None):
             "fields": [
                 {
                     "name": "Backup Details",
-                    "value": f"Filename: `{filename}`\nSize: `{file_size_mb:.2f} MB`",
+                    "value": f"Filename: `{zip_filename}`\nSize: `{file_size_mb:.2f} MB`",
                     "inline": False
                 },
                 {
@@ -66,10 +72,14 @@ def perform_db_backup(runtime=None):
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         }
 
-        with open(filepath, "rb") as file_handle:
-            files = {"file": (filename, file_handle, "application/sql")}
+        with open(zip_filepath, "rb") as file_handle:
+            files = {"file": (zip_filename, file_handle, "application/gzip")}
             payload = {"payload_json": json.dumps({"embeds": [embed_payload]})}
             response = runtime.session.post(webhook_url, data=payload, files=files, timeout=30)
+            if response.status_code == 413:
+                logger.log("DB backup upload too large after gzip. Sending metadata only.")
+                payload = {"embeds": [embed_payload]}
+                response = runtime.session.post(webhook_url, json=payload, timeout=30)
             if response.status_code >= 400:
                 raise requests.RequestException(
                     f"Webhook returned {response.status_code}: {response.text[:200]}"
@@ -84,6 +94,8 @@ def perform_db_backup(runtime=None):
     finally:
         if os.path.exists(filepath):
             os.remove(filepath)
+        if os.path.exists(zip_filepath):
+            os.remove(zip_filepath)
 
 
 def db_backup_loop():
